@@ -9,14 +9,15 @@ import ubinascii
 # 配置I2S引脚
 i2s = machine.I2S(
     0,
-    sck=machine.Pin(17),  # 时钟引脚
-    ws=machine.Pin(18),   # 帧选择引脚
-    sd=machine.Pin(16),   # 数据引脚
+    sck=machine.Pin(14),  # 改为 GPIO 14
+    ws=machine.Pin(15),   # 改为 GPIO 15
+    sd=machine.Pin(13),   # 改为 GPIO 13
     mode=machine.I2S.RX,  # 接收模式
     bits=32,              # 每个样本16位tre
     format=machine.I2S.MONO,  # 单声道
     rate=16000,           # 采样率16kHz
-    ibuf=20000            # 缓冲区大小
+    ibuf=20000,            # 缓冲区大小
+    
 )
 udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 udp_socket.setblocking(False)  # 非阻塞模式
@@ -35,18 +36,40 @@ def move_bit(value):
 
 def parse_audio_buffer(buf):
     samples = []
-    mv = memoryview(buf)
-    for i in range(0, len(mv), 4):
-        chunk = mv[i:i+4]
-        raw_value = int.from_bytes(chunk, 'little', False)
-        raw_24bit = raw_value >> 8
-        if raw_24bit & 0x00800000:
-            signed_value = raw_24bit | 0xFF000000
+    for i in range(0, len(buf), 4):
+        # 组合32bit值
+        b0, b1, b2, b3 = buf[i], buf[i+1], buf[i+2], buf[i+3]
+        raw_32bit = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+        
+        # 提取24bit
+        raw_24bit = raw_32bit & 0x00FFFFFF
+        
+        # 补码转换
+        signed = raw_24bit if raw_24bit < 0x800000 else raw_24bit - 0x1000000
+        
+        # 精确缩放（修正负数计算）
+        if signed >= 0:
+            scaled = (signed * 127 + 16383) // 32767  # 正数：32767→127
         else:
-            signed_value = raw_24bit & 0x00FFFFFF
-        signed_value = signed_value - 0x1000000 if signed_value & 0x800000 else signed_value
-        samples.append(signed_value)
-    return bytearray([max(min(sample, 32767), -32768) & 0xFFFF for sample in samples])
+            scaled = -((-signed * 127 + 16383) // 32767)  # 负数：-32768→-128
+        
+        # 限幅
+        final = max(min(scaled, 127), -128)
+        samples.append(final)
+    
+    return bytearray([s & 0xFF for s in samples])
+
+def parse_audio_buffer(buf):
+    samples = []
+    for i in range(0, len(buf), 4):
+        raw = int.from_bytes(buf[i:i+4], 'little')
+        raw24 = raw & 0x00FFFFFF
+        signed = raw24 if raw24 < 0x800000 else raw24 - 0x01000000
+        scaled = signed >> 8  # 24bit→16bit（右移8位）
+        samples.append(scaled)
+    
+    # 返回16-bit有符号值列表（非字节流！）
+    return samples
 
 def read_audio():
     while True:
@@ -55,10 +78,6 @@ def read_audio():
             interval_ms = int((1024 / 32000) * 1000) # 计算缓冲区数据的时间间隔
             i2s.readinto(buffer)     # 将数据读取到缓冲区中 # 2. 构造协议包
             buffer = parse_audio_buffer(buffer)
-            # 确保数据长度是偶数
-            if len(buffer) % 2 != 0:
-                buffer += b'\x00'
-            print(buffer[:20])
             buffer = remove_dc_offset(buffer) 
             analyze_audio(buffer)
             raw_audio = buffer       # 将缓冲区数据赋值给 raw_audio
@@ -95,29 +114,34 @@ def unsigned_to_signed(value, bits):
 
 #去直流偏移
 def remove_dc_offset(pcm_data):
-    if len(pcm_data) % 2 != 0:
-        pcm_data += b'\x00'
     samples = [int.from_bytes(pcm_data[i:i+2], 'little', True) for i in range(0, len(pcm_data), 2)]
     dc_offset = sum(samples) // len(samples)
-    adjusted_samples = []
-    for sample in samples:
-        adjusted = sample - dc_offset
-        # 限幅至16位有符号整数范围
-        adjusted = max(min(adjusted, 32767), -32768)
-        adjusted_samples.append(adjusted)
-    return b''.join([s.to_bytes(2, 'little', True) for s in adjusted_samples])
+    return b''.join((sample - dc_offset).to_bytes(2, 'little', True) for sample in samples)
+
+def remove_dc_offset(samples):  # 输入改为列表
+    dc_offset = sum(samples) // len(samples)
+    return [s - dc_offset for s in samples]  # 返回列表
 # ====================
 # ADPCM编码器（简化版）
 # ====================
 class ADPCMEncoder:
+    
     def __init__(self):
-        self.index = 0
         self.prev_sample = 0
-
-    def encode(self, pcm_data):
-        # 手动实现步长为 2 的切片
-        return bytes([pcm_data[i] >> 4 for i in range(0, len(pcm_data), 2)])
-
+        self.index = 0
+        
+    def encode(self, samples):  # 接收数值列表而非字节流
+        encoded = bytearray()
+        for sample in samples:
+            # 简化ADPCM编码（实际应使用标准算法）
+            delta = sample - self.prev_sample
+            code = min(15, max(0, (abs(delta) >> 4)))
+            if delta < 0:
+                code |= 0x10
+            encoded.append(code)
+            self.prev_sample = sample
+        return bytes(encoded)
+    
 encoder = ADPCMEncoder()
 # ====================
 # 协议封装函数
@@ -131,15 +155,19 @@ def build_packet(raw_audio):
         AUDIO_FORMAT,
         MAGIC_NUMBER,
         (DEVICE_ID + '\x00' * (16 - len(DEVICE_ID))).encode('utf-8'),  # 手动填充到16字节
-        len(raw_audio)
+        len(compressed)
     )
     # 3. 合并包头和音频数据
-    return header + raw_audio
+    return header + compressed
 
 #检查音频信号强度
 def analyze_audio(buffer):
     samples = [int.from_bytes(buffer[i:i+2], 'little', True) for i in range(0, len(buffer), 2)]
     print(f"Min: {min(samples)}, Max: {max(samples)}, Avg: {sum(samples) // len(samples)}")
+
+def analyze_audio(samples):
+    print(f"Min: {min(samples)}, Max: {max(samples)}, Avg: {sum(samples)//len(samples)}")
+
 if __name__ == "__main__":
     if do_connect():
         read_audio()
