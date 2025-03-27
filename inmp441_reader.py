@@ -3,7 +3,7 @@ import esp32
 import urequests
 import time
 from wificonnections import do_connect
-import socket  # 新增导入
+import socket
 import struct
 import ubinascii
 # 配置I2S引脚
@@ -37,31 +37,6 @@ def move_bit(value):
 def parse_audio_buffer(buf):
     samples = []
     for i in range(0, len(buf), 4):
-        # 组合32bit值
-        b0, b1, b2, b3 = buf[i], buf[i+1], buf[i+2], buf[i+3]
-        raw_32bit = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
-        
-        # 提取24bit
-        raw_24bit = raw_32bit & 0x00FFFFFF
-        
-        # 补码转换
-        signed = raw_24bit if raw_24bit < 0x800000 else raw_24bit - 0x1000000
-        
-        # 精确缩放（修正负数计算）
-        if signed >= 0:
-            scaled = (signed * 127 + 16383) // 32767  # 正数：32767→127
-        else:
-            scaled = -((-signed * 127 + 16383) // 32767)  # 负数：-32768→-128
-        
-        # 限幅
-        final = max(min(scaled, 127), -128)
-        samples.append(final)
-    
-    return bytearray([s & 0xFF for s in samples])
-
-def parse_audio_buffer(buf):
-    samples = []
-    for i in range(0, len(buf), 4):
         raw = int.from_bytes(buf[i:i+4], 'little')
         raw24 = raw & 0x00FFFFFF
         signed = raw24 if raw24 < 0x800000 else raw24 - 0x01000000
@@ -76,13 +51,11 @@ def read_audio():
         try:
             buffer = bytearray(1024)  # 创建一个 1024 字节的缓冲区
             interval_ms = int((1024 / 32000) * 1000) # 计算缓冲区数据的时间间隔
-            i2s.readinto(buffer)     # 将数据读取到缓冲区中 # 2. 构造协议包
-            buffer = parse_audio_buffer(buffer)
-            buffer = remove_dc_offset(buffer) 
-            analyze_audio(buffer)
-            raw_audio = buffer       # 将缓冲区数据赋值给 raw_audio
-            packet = build_packet(raw_audio)
-            # print(packet)
+            i2s.readinto(buffer)     # 将数据读取到缓冲区中
+            samples = parse_audio_buffer(buffer)
+            samples = remove_dc_offset(samples) 
+            analyze_audio(samples)
+            packet = build_packet(samples)
             # 3. 发送UDP包
             udp_socket.sendto(packet, (SERVER_IP, SERVER_PORT))
             # 4. 控制发送速率（约interval_msms间隔）
@@ -111,16 +84,10 @@ def unsigned_to_signed(value, bits):
         value -= (1 << bits)
     return value
 
-
-#去直流偏移
-def remove_dc_offset(pcm_data):
-    samples = [int.from_bytes(pcm_data[i:i+2], 'little', True) for i in range(0, len(pcm_data), 2)]
-    dc_offset = sum(samples) // len(samples)
-    return b''.join((sample - dc_offset).to_bytes(2, 'little', True) for sample in samples)
-
-def remove_dc_offset(samples):  # 输入改为列表
+def remove_dc_offset(samples):  # 输入为列表
     dc_offset = sum(samples) // len(samples)
     return [s - dc_offset for s in samples]  # 返回列表
+
 # ====================
 # ADPCM编码器（简化版）
 # ====================
@@ -143,6 +110,7 @@ class ADPCMEncoder:
         return bytes(encoded)
     
 encoder = ADPCMEncoder()
+
 # ====================
 # 协议封装函数
 # ====================
@@ -150,24 +118,26 @@ def build_packet(raw_audio):
     # 1. 音频压缩
     compressed = encoder.encode(raw_audio)
     
-    # 2. 构造协议头
+    # 2. 构造协议头 - 修复设备ID填充方式
+    device_id_bytes = DEVICE_ID.encode('utf-8')
+    if len(device_id_bytes) > 16:
+        device_id_bytes = device_id_bytes[:16]
+    else:
+        device_id_bytes = device_id_bytes + b'\x00' * (16 - len(device_id_bytes))
+    
     header = struct.pack(
         AUDIO_FORMAT,
         MAGIC_NUMBER,
-        (DEVICE_ID + '\x00' * (16 - len(DEVICE_ID))).encode('utf-8'),  # 手动填充到16字节
+        device_id_bytes,  # 已正确填充到16字节
         len(compressed)
     )
     # 3. 合并包头和音频数据
     return header + compressed
-
-#检查音频信号强度
-def analyze_audio(buffer):
-    samples = [int.from_bytes(buffer[i:i+2], 'little', True) for i in range(0, len(buffer), 2)]
-    print(f"Min: {min(samples)}, Max: {max(samples)}, Avg: {sum(samples) // len(samples)}")
 
 def analyze_audio(samples):
     print(f"Min: {min(samples)}, Max: {max(samples)}, Avg: {sum(samples)//len(samples)}")
 
 if __name__ == "__main__":
     if do_connect():
+        print("Wi-Fi已连接，开始音频流传输...")
         read_audio()
