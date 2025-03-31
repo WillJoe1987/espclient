@@ -123,17 +123,17 @@ def main():
                 time.sleep_ms(max(1, interval_ms))
                 
             except OSError as e:
-                print(f"错误: {e}")
+                print(f"error: {e}")
                 time.sleep(1)
                 if not network.WLAN(network.STA_IF).isconnected():
                     do_connect()
                     
     except KeyboardInterrupt:
-        print("用户中断")
+        print("user cancel")
     finally:
         if mic: mic.deinit()
         if udp_socket: udp_socket.close()
-        print(f"总共发送数据包: {packet_count}")
+        print(f"total pack: {packet_count}")
 
 if __name__ == "__main__":
     if do_connect():
