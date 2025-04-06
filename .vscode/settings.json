@@ -1,6 +1,6 @@
 {
     "python.autoComplete.extraPaths": [
-        "c:/Users/Admin/.vscode/extensions/rt-thread.rt-thread-micropython-1.0.11/microExamples/code-completion"
+        "c:/Users/littl/.vscode/extensions/rt-thread.rt-thread-micropython-1.0.11/microExamples/code-completion"
     ],
     "files.associations": {
         ".mpyproject.json": "jsonc"
