@@ -1,6 +1,6 @@
 import time
 import network
-from persist import add_wifi, get_wifi_list
+from utils.persist import add_wifi, get_wifi_list
 
 wlan = network.WLAN(network.WLAN.IF_STA)
 wlan.active(True)
