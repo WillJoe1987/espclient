@@ -1,7 +1,7 @@
 import bluetooth
 import struct
 from micropython import const
-from persist import get_device_id
+from utils.persist import get_device_id
 import json
 from wificonnections import do_connect
 from boot import activate, check_for_new_version
