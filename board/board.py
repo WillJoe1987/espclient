@@ -36,6 +36,7 @@ class Board:
 
 
 class WifiBoard(Board):
+
     def __init__(self):
         super().__init__()
         self.wifi = network.WLAN(network.STA_IF)
@@ -86,3 +87,16 @@ class WifiBoard(Board):
                 "rssi": self.wifi.status('rssi')
             })
         return ujson.dumps(info_dict)
+
+
+class WifiBluetoothBoard(WifiBoard):
+    def __init__(self):
+        super().__init__()
+        self.bluetooth = None  # Placeholder for Bluetooth instance
+
+    def start_network(self):
+        super().start_network()
+        # Initialize Bluetooth here if needed
+        print("Bluetooth functionality is not implemented yet.")
+
+    

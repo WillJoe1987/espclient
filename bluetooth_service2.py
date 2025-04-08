@@ -90,12 +90,23 @@ class BLEUART:
     def _advertise(self):
         self._ble.gap_advertise(100000, adv_data=self._payload)
 
+    def close(self):
+        """关闭蓝牙服务并停止广播"""
+        if self._ble:
+            self._ble.gap_advertise(None)  # 停止广播
+            self._ble.active(False)       # 停止蓝牙
+            print("蓝牙服务已关闭")
+
 def main():
     ble = bluetooth.BLE()
+    print("uart started.")
     uart = BLEUART(ble)
-    print("等待手机连接...")
-    while True:
-        pass
-
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        uart.close()  # 在程序退出时关闭蓝牙服务
+        print("程序已退出")
+        
 if __name__ == "__main__":
     main()

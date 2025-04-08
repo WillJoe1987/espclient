@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "name": "deploy",
+    "timestamp": [
+        "2025-04-08T20:11:15Z"
+    ],
+    "description": "upload to esp32, and run deploy.py. In this file, define your file on by one.",
+    "filesPath": [
+        "application.py",
+        "board/board.py",
+        "iot/things.py",
+        "main.py",
+        "protocol/protocol.py",
+        "utils/persist.py"
+    ]
+}
