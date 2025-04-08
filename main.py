@@ -3,10 +3,6 @@ import network
 import time
 from application import Application
 
-def initialize_nvs():
-    # 模拟初始化 NVS（在 MicroPython 中通常不需要）
-    print("Initializing NVS...")
-
 def initialize_wifi():
     # 初始化 WiFi
     wifi = network.WLAN(network.STA_IF)
@@ -24,8 +20,6 @@ def initialize_wifi():
         print("WiFi already connected:", wifi.ifconfig())
 
 def main():
-    # 初始化 NVS
-    initialize_nvs()
 
     # 初始化 WiFi
     initialize_wifi()

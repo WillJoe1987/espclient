@@ -1,7 +1,7 @@
 import time
 import ujson
 import _thread
-from board.board import Board
+from board.board import BLEWifiBoard
 from protocol.protocol import WebsocketProtocol
 from iot.things import ThingManager
 
@@ -27,7 +27,7 @@ class Application:
         self.voice_detected = False
 
     def start(self):
-        board = Board()
+        board = BLEWifiBoard()
         self.set_device_state("starting")
 
         # Initialize protocol

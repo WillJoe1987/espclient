@@ -6,63 +6,68 @@ import json
 from wificonnections import do_connect
 from boot import activate, check_for_new_version
 
-# --- 手动定义广播数据函数 ---
-def advertising_payload(limited_disc=False, br_edr=False, name=None, services=None):
-    payload = bytearray()
-    def _append(adv_type, value):
-        nonlocal payload
-        payload += struct.pack('BB', len(value) + 1, adv_type) + value
-    if name:
-        _append(0x09, name.encode())
-    if services:
-        for uuid in services:
-            b = bytes(uuid)
-            if len(b) == 2:
-                _append(0x03, b)
-            elif len(b) == 4:
-                _append(0x05, b)
-            elif len(b) == 16:
-                _append(0x07, b)
-    return payload
 
-# --- 蓝牙服务定义 ---
-_IRQ_CENTRAL_CONNECT = const(1)
-_IRQ_CENTRAL_DISCONNECT = const(2)
-_IRQ_GATTS_WRITE = const(3)
 
-_BLE_UUID_SERVICE = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef0")  # 自定义服务 UUID
-_BLE_UUID_CHAR_RX = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef1")  # 自定义特征 UUID
 
-_BLE_SERVICE = (
-    _BLE_UUID_SERVICE,
-    (
-        (_BLE_UUID_CHAR_RX, bluetooth.FLAG_READ | bluetooth.FLAG_WRITE),  # 可读可写特征
-    ),
-)
 
 class BLEUART:
     def __init__(self, ble):
+
+        # --- 蓝牙服务定义 ---
+        self._IRQ_CENTRAL_CONNECT = const(1)
+        self._IRQ_CENTRAL_DISCONNECT = const(2)
+        self._IRQ_GATTS_WRITE = const(3)
+
+        self._BLE_UUID_SERVICE = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef0")  # 自定义服务 UUID
+        self._BLE_UUID_CHAR_RX = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef1")  # 自定义特征 UUID
+
+        self._BLE_SERVICE = (
+            self._BLE_UUID_SERVICE,
+            (
+                (self._BLE_UUID_CHAR_RX, bluetooth.FLAG_READ | bluetooth.FLAG_WRITE),  # 可读可写特征
+            ),
+        )
+
         self._ble = ble
         self._ble.active(True)
         self._ble.irq(self._irq)
         name = get_device_id()
-        ((self._rx_handle,),) = self._ble.gatts_register_services((_BLE_SERVICE,))
+        ((self._rx_handle,),) = self._ble.gatts_register_services((self._BLE_SERVICE,))
         self._connections = set()
-        self._payload = advertising_payload(name=name, services=[_BLE_UUID_SERVICE])
+        self._payload = self.advertising_payload(name=name, services=[self._BLE_UUID_SERVICE])
         self._advertise()
         self._buffer = b""  # 用于存储分片数据
 
+    # --- 手动定义广播数据函数 ---
+    def advertising_payload(self, limited_disc=False, br_edr=False, name=None, services=None):
+        payload = bytearray()
+        def _append(adv_type, value):
+            nonlocal payload
+            payload += struct.pack('BB', len(value) + 1, adv_type) + value
+        if name:
+            _append(0x09, name.encode())
+        if services:
+            for uuid in services:
+                b = bytes(uuid)
+                if len(b) == 2:
+                    _append(0x03, b)
+                elif len(b) == 4:
+                    _append(0x05, b)
+                elif len(b) == 16:
+                    _append(0x07, b)
+        return payload
+
     def _irq(self, event, data):
-        if event == _IRQ_CENTRAL_CONNECT:
+        if event == self._IRQ_CENTRAL_CONNECT:
             conn_handle, _, _ = data
             self._connections.add(conn_handle)
             print("手机已连接")
-        elif event == _IRQ_CENTRAL_DISCONNECT:
+        elif event == self._IRQ_CENTRAL_DISCONNECT:
             conn_handle, _, _ = data
             self._connections.remove(conn_handle)
             self._advertise()
             print("手机已断开")
-        elif event == _IRQ_GATTS_WRITE:
+        elif event == self._IRQ_GATTS_WRITE:
             conn_handle = data[0]
             value = self._ble.gatts_read(self._rx_handle)
             if value:
