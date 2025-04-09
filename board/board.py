@@ -47,6 +47,7 @@ class Board:
 class WifiBoard(Board):
 
     def __init__(self):
+        self.wifi_monitor_interval = 10  # 监控间隔时间
         super().__init__()
         self.wifi = network.WLAN(network.STA_IF)    
         self.board_name = "WiFiBoard"  # 设置板子名称  
@@ -65,7 +66,7 @@ class WifiBoard(Board):
         while True:
             if self.wifi.isconnected():
                 self.moniting = True
-                time.sleep(1)  # 定期检查Wi-Fi状态
+                time.sleep(self.wifi_monitor_interval)  # 定期检查Wi-Fi状态
             else:
                 self.moniting = False
                 break

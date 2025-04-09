@@ -27,7 +27,7 @@ class Application:
         self.voice_detected = False
 
     def start(self):
-        board = BLEWifiBoard()
+        self.board = BLEWifiBoard()
         self.set_device_state("starting")
 
         # Initialize protocol
