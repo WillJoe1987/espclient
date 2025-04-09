@@ -4,10 +4,8 @@ import json,os
 #代码上传后都位于根目录下，导致根据包名的引用关系出错；
 #因此，需要手动逐个文件调整目录结构。
 # 目前的解决方案是：
-# 1. 上传代码到根目录下
-# 2. 通过deploybuilder.py脚本，自动生成文件目录结构配置文件deploy.json
-# 3. 上传deploy.json到根目录下
-# 4. 执行deploy.py脚本，自动调整目录结构
+# 1. 通过deploybuilder.py脚本，自动生成文件目录结构配置文件deploy.json，并上传deploy.json以及相关代码到设备上。
+# 2. 在设备上执行deploy.py脚本，自动调整目录结构
 
 #本脚本仅执行第四步操作，即，根据deploy.json文件，自动调整目录结构。
 
